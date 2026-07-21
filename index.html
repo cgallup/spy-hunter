@@ -125,7 +125,7 @@
     <div id="banner"></div>
     <div id="msg"></div>
   </div>
-  <div id="hint">ARROWS/A-D to steer &nbsp;•&nbsp; SPACE to fire &nbsp;•&nbsp; O for oil &nbsp;•&nbsp; S for smoke &nbsp;•&nbsp; X for missile &nbsp;•&nbsp; P to pause</div>
+  <div id="hint">ARROWS/A-D to steer &nbsp;•&nbsp; SPACE to fire &nbsp;•&nbsp; O for oil &nbsp;•&nbsp; S for smoke &nbsp;•&nbsp; X for missile &nbsp;•&nbsp; P to pause &nbsp;•&nbsp; M to mute</div>
   <div id="controls">
     <div class="side">
       <button class="ctrl-btn" id="leftBtn">&#9664;</button>
@@ -156,6 +156,7 @@ window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
   if (e.code === 'KeyP') togglePause();
+  if (e.code === 'KeyM') toggleMute();
   if (e.code === 'KeyO') fireOil();
   if (e.code === 'KeyS') fireSpecial('smoke');
   if (e.code === 'KeyX') fireSpecial('missile');
@@ -177,6 +178,101 @@ bindButton(document.getElementById('rightBtn'), 'ArrowRight');
 bindButton(document.getElementById('fireBtn'), 'Space');
 bindButton(document.getElementById('oilBtn'), 'KeyO_touch', () => fireOil());
 bindButton(document.getElementById('weaponBtn'), 'KeyX_touch', () => useHeldSpecial());
+
+// ---------- Music ----------
+const MUSIC_VOLUME = 0.16;
+const TEMPO = 150; // bpm
+const SEC_PER_BEAT = 60 / TEMPO;
+
+function noteFreq(note) {
+  const SEMITONES = { C: -9, 'C#': -8, D: -7, 'D#': -6, E: -5, F: -4, 'F#': -3, G: -2, 'G#': -1, A: 0, 'A#': 1, B: 2 };
+  const m = note.match(/^([A-G]#?)(\d)$/);
+  const semis = SEMITONES[m[1]] + (parseInt(m[2], 10) - 4) * 12;
+  return 440 * Math.pow(2, semis / 12);
+}
+
+// One 16-beat (4-bar) melodic loop over an Em - C - G - D progression.
+const LEAD = [
+  ['E4', 0.5], ['G4', 0.5], ['B4', 0.5], ['E5', 0.5],
+  ['D5', 0.5], ['B4', 0.5], ['G4', 0.5], ['B4', 0.5],
+  ['C5', 0.5], ['B4', 0.5], ['A4', 0.5], ['G4', 0.5],
+  ['F#4', 0.5], ['G4', 0.5], ['A4', 0.5], ['B4', 0.5],
+  ['A4', 0.5], ['G4', 0.5], ['F#4', 0.5], ['E4', 0.5],
+  ['G4', 0.5], ['B4', 0.5], ['E5', 1],
+  ['D5', 0.5], ['C5', 0.5], ['B4', 0.5], ['A4', 0.5],
+  ['G4', 0.5], ['F#4', 0.5], ['E4', 1],
+];
+const BASS = [];
+(function buildBass() {
+  const roots = ['E2', 'C2', 'G2', 'D2'];
+  roots.forEach(root => {
+    const letter = root.slice(0, -1);
+    const octUp = letter + (parseInt(root.slice(-1), 10) + 1);
+    for (let i = 0; i < 4; i++) {
+      BASS.push([root, 0.5]);
+      BASS.push([i === 2 ? octUp : root, 0.5]);
+    }
+  });
+})();
+
+let audioCtx = null;
+let musicGain = null;
+let musicMuted = false;
+let leadIdx = 0, leadTime = 0;
+let bassIdx = 0, bassTime = 0;
+let schedulerHandle = null;
+
+function playNote(freq, time, dur, type, peak) {
+  const osc = audioCtx.createOscillator();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, time);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0, time);
+  g.gain.linearRampToValueAtTime(peak, time + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  osc.connect(g);
+  g.connect(musicGain);
+  osc.start(time);
+  osc.stop(time + dur + 0.02);
+}
+
+function schedulerTick() {
+  const lookahead = 0.15;
+  const now = audioCtx.currentTime;
+  while (leadTime < now + lookahead) {
+    const [note, beats] = LEAD[leadIdx];
+    const dur = beats * SEC_PER_BEAT;
+    playNote(noteFreq(note), leadTime, dur * 0.85, 'triangle', 0.10);
+    leadTime += dur;
+    leadIdx = (leadIdx + 1) % LEAD.length;
+  }
+  while (bassTime < now + lookahead) {
+    const [note, beats] = BASS[bassIdx];
+    const dur = beats * SEC_PER_BEAT;
+    playNote(noteFreq(note), bassTime, dur * 0.8, 'square', 0.07);
+    bassTime += dur;
+    bassIdx = (bassIdx + 1) % BASS.length;
+  }
+}
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  musicGain = audioCtx.createGain();
+  musicGain.gain.value = musicMuted ? 0 : MUSIC_VOLUME;
+  musicGain.connect(audioCtx.destination);
+  leadTime = audioCtx.currentTime + 0.1;
+  bassTime = leadTime;
+  schedulerHandle = setInterval(schedulerTick, 50);
+}
+
+function toggleMute() {
+  musicMuted = !musicMuted;
+  if (musicGain) musicGain.gain.value = musicMuted ? 0 : MUSIC_VOLUME;
+}
+
+window.addEventListener('keydown', initAudio, { once: true });
+window.addEventListener('pointerdown', initAudio, { once: true });
 
 canvas.addEventListener('pointerdown', () => {
   if (state === 'gameover') resetGame();
@@ -466,8 +562,13 @@ function updateHud() {
 }
 
 function togglePause() {
-  if (state === 'playing') { state = 'paused'; msgEl.textContent = 'PAUSED'; }
-  else if (state === 'paused') { state = 'playing'; msgEl.textContent = ''; }
+  if (state === 'playing') {
+    state = 'paused'; msgEl.textContent = 'PAUSED';
+    if (audioCtx) audioCtx.suspend();
+  } else if (state === 'paused') {
+    state = 'playing'; msgEl.textContent = '';
+    if (audioCtx) audioCtx.resume();
+  }
 }
 
 function rectsOverlap(a, b) {
