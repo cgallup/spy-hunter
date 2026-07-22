@@ -12,13 +12,15 @@
 <style>
   html, body {
     margin: 0;
-    height: 100%;
+    height: 100vh;
+    height: 100dvh;
     background: #000;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     font-family: 'Courier New', monospace;
     overscroll-behavior: none;
+    overflow-y: auto;
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
@@ -28,9 +30,8 @@
     color: #0f0;
     width: 100%;
     max-width: 480px;
-    padding: 0 8px;
+    padding: 6px 8px;
     box-sizing: border-box;
-    touch-action: none;
   }
   .canvas-box {
     position: relative;
@@ -40,10 +41,15 @@
     background: #1a5c1a;
     border: 2px solid #0f0;
     image-rendering: pixelated;
-    width: 100%;
-    height: auto;
     display: block;
+    width: 100%;
+    max-width: 480px;
+    height: auto;
+    max-height: 58vh;
+    max-height: 58dvh;
+    aspect-ratio: 480 / 800;
     touch-action: none;
+    margin: 0 auto;
   }
   #hud {
     display: flex;
@@ -74,19 +80,23 @@
   }
   #hint {
     color: #0a0;
-    font-size: 12px;
-    margin-top: 6px;
+    font-size: 11px;
+    margin-top: 4px;
   }
   #controls {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    margin-top: 14px;
+    margin-top: 10px;
   }
   #controls .side {
     display: flex;
     gap: 10px;
+  }
+  .sub-row {
+    display: flex;
+    gap: 8px;
   }
   .ctrl-btn {
     font-family: inherit;
@@ -96,7 +106,7 @@
     border: 2px solid #0f0;
     border-radius: 10px;
     width: 62px;
-    height: 54px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -107,9 +117,9 @@
     background: #0f0;
     color: #000;
   }
-  #fireBtn { width: 78px; font-size: 15px; }
-  #oilBtn { width: 78px; font-size: 13px; }
-  #weaponBtn { width: 78px; font-size: 12px; }
+  #fireBtn { width: 100%; font-size: 15px; }
+  #oilBtn { width: 78px; font-size: 12px; }
+  #weaponBtn { width: 78px; font-size: 11px; }
   .btn-col { display: flex; flex-direction: column; gap: 8px; }
 </style>
 </head>
@@ -125,7 +135,7 @@
     <div id="banner"></div>
     <div id="msg"></div>
   </div>
-  <div id="hint">ARROWS/A-D to steer &nbsp;•&nbsp; SPACE to fire &nbsp;•&nbsp; O for oil &nbsp;•&nbsp; S for smoke &nbsp;•&nbsp; X for missile &nbsp;•&nbsp; P to pause &nbsp;•&nbsp; M to mute</div>
+  <div id="hint">ARROWS/A-D steer &nbsp;•&nbsp; SPACE fire &nbsp;•&nbsp; O oil &nbsp;•&nbsp; S smoke &nbsp;•&nbsp; X missile &nbsp;•&nbsp; P pause &nbsp;•&nbsp; M mute</div>
   <div id="controls">
     <div class="side">
       <button class="ctrl-btn" id="leftBtn">&#9664;</button>
@@ -133,8 +143,10 @@
     </div>
     <div class="btn-col">
       <button class="ctrl-btn" id="fireBtn">FIRE</button>
-      <button class="ctrl-btn" id="oilBtn">OIL</button>
-      <button class="ctrl-btn" id="weaponBtn">SPECIAL</button>
+      <div class="sub-row">
+        <button class="ctrl-btn" id="oilBtn">OIL</button>
+        <button class="ctrl-btn" id="weaponBtn">SPEC</button>
+      </div>
     </div>
   </div>
 </div>
