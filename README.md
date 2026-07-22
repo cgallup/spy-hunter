@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="400" height="400" alt="Spy-Hunter" src="https://github.com/user-attachments/assets/ea0bf8a3-078d-4bf7-99bc-673b95663560" />
+  <img width="300" height="300" alt="Spy-Hunter" src="https://github.com/user-attachments/assets/ea0bf8a3-078d-4bf7-99bc-673b95663560" />
 </p>
 
 Click the link below to start the game.
