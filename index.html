@@ -229,7 +229,9 @@ const BASS = [];
 
 let audioCtx = null;
 let musicGain = null;
+let sfxGain = null;
 let musicMuted = false;
+let sfxMuted = false;
 let leadIdx = 0, leadTime = 0;
 let bassIdx = 0, bassTime = 0;
 let schedulerHandle = null;
@@ -246,6 +248,95 @@ function playNote(freq, time, dur, type, peak) {
   g.connect(musicGain);
   osc.start(time);
   osc.stop(time + dur + 0.02);
+}
+
+function playTone(freq, duration, volume, type = 'sine', slide = 0, attack = 0.01, release = 0.12) {
+  if (!audioCtx || sfxMuted) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, now);
+  if (slide) osc.frequency.linearRampToValueAtTime(freq + slide, now + duration);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(volume, now + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration + release);
+  osc.connect(gain);
+  gain.connect(sfxGain);
+  osc.start(now);
+  osc.stop(now + duration + release + 0.01);
+}
+
+function playNoiseBurst(duration = 0.2, volume = 0.16, filterFreq = 1400) {
+  if (!audioCtx || sfxMuted) return;
+  const now = audioCtx.currentTime;
+  const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < channel.length; i++) {
+    channel[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / channel.length, 2);
+  }
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = filterFreq;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(sfxGain);
+  source.start(now);
+  source.stop(now + duration + 0.01);
+}
+
+function playSfx(kind) {
+  if (!audioCtx || sfxMuted) return;
+  switch (kind) {
+    case 'oil':
+      playTone(120, 0.1, 0.04, 'sawtooth', 40);
+      playTone(80, 0.14, 0.03, 'square', 20);
+      break;
+    case 'missile':
+      playTone(520, 0.08, 0.09, 'square', 180);
+      playTone(340, 0.12, 0.06, 'triangle', -80);
+      break;
+    case 'smoke':
+      playTone(300, 0.11, 0.05, 'triangle', 90);
+      playTone(220, 0.14, 0.04, 'sine', 40);
+      break;
+    case 'crash':
+      playNoiseBurst(0.16, 0.14, 700);
+      playTone(140, 0.12, 0.08, 'sawtooth', -60);
+      break;
+    case 'death':
+      playTone(240, 0.08, 0.08, 'sawtooth', -120);
+      playTone(180, 0.16, 0.06, 'triangle', -80);
+      break;
+    case 'explosion':
+      playNoiseBurst(0.22, 0.12, 900);
+      playTone(220, 0.16, 0.07, 'sawtooth', 260);
+      break;
+    case 'pickup':
+      playTone(660, 0.08, 0.05, 'triangle', 120);
+      playTone(880, 0.12, 0.04, 'square', 160);
+      break;
+    case 'gameover':
+      playTone(220, 0.12, 0.06, 'sawtooth', -80);
+      playTone(160, 0.16, 0.05, 'triangle', -60);
+      break;
+  }
+}
+
+function playGameOverVoice() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  const utterance = new SpeechSynthesisUtterance('Game Over Man');
+  utterance.lang = 'en-US';
+  utterance.rate = 0.95;
+  utterance.pitch = 0.8;
+  utterance.volume = 0.9;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
 }
 
 function schedulerTick() {
@@ -268,23 +359,34 @@ function schedulerTick() {
 }
 
 function initAudio() {
-  if (audioCtx) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  musicGain = audioCtx.createGain();
-  musicGain.gain.value = musicMuted ? 0 : MUSIC_VOLUME;
-  musicGain.connect(audioCtx.destination);
-  leadTime = audioCtx.currentTime + 0.1;
-  bassTime = leadTime;
-  schedulerHandle = setInterval(schedulerTick, 50);
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    musicGain = audioCtx.createGain();
+    sfxGain = audioCtx.createGain();
+    musicGain.gain.value = musicMuted ? 0 : MUSIC_VOLUME;
+    sfxGain.gain.value = sfxMuted ? 0 : 0.9;
+    musicGain.connect(audioCtx.destination);
+    sfxGain.connect(audioCtx.destination);
+    leadTime = audioCtx.currentTime + 0.1;
+    bassTime = leadTime;
+    schedulerHandle = setInterval(schedulerTick, 50);
+  }
+  // iOS Safari can leave a gesture-created AudioContext 'suspended';
+  // keep nudging it on every input until it actually starts running.
+  if (audioCtx.state === 'suspended' && state !== 'paused') {
+    audioCtx.resume();
+  }
 }
 
 function toggleMute() {
   musicMuted = !musicMuted;
+  sfxMuted = musicMuted;
   if (musicGain) musicGain.gain.value = musicMuted ? 0 : MUSIC_VOLUME;
+  if (sfxGain) sfxGain.gain.value = sfxMuted ? 0 : 0.9;
 }
 
-window.addEventListener('keydown', initAudio, { once: true });
-window.addEventListener('pointerdown', initAudio, { once: true });
+window.addEventListener('keydown', initAudio);
+window.addEventListener('pointerdown', initAudio);
 
 canvas.addEventListener('pointerdown', () => {
   if (state === 'gameover') resetGame();
@@ -504,6 +606,7 @@ function fireOil() {
     spawnDist: distance,
   });
   oilCooldown = OIL_COOLDOWN_FRAMES;
+  playSfx('oil');
 }
 
 function fireSpecial(kind) {
@@ -514,6 +617,7 @@ function fireSpecial(kind) {
   }
   if (kind === 'missile') {
     playerBullets.push({ x: player.x - 4, y: player.y - player.h / 2, w: 8, h: 22, dy: -13, missile: true });
+    playSfx('missile');
   } else {
     hazards.push({
       kind: 'smoke',
@@ -522,6 +626,7 @@ function fireSpecial(kind) {
       radius: 34,
       spawnDist: distance,
     });
+    playSfx('smoke');
   }
   player.specialAmmo--;
   if (player.specialAmmo <= 0) player.special = null;
@@ -668,6 +773,7 @@ function update() {
           player.special = w;
           player.specialAmmo = w === 'missile' ? 4 : 3;
           showBanner('WEAPON ACQUIRED: ' + w.toUpperCase());
+          playSfx('pickup');
           t.alive = false;
           updateHud();
         }
@@ -706,6 +812,8 @@ function crashPlayer() {
   lives--;
   updateHud();
   addParticles(player.x, player.y, '#ff6600');
+  playSfx('crash');
+  if (lives > 0) playSfx('death');
   if (lives <= 0) {
     endGame();
   } else {
@@ -722,6 +830,7 @@ function handleCollisions() {
       if (rectsOverlap(b, t)) {
         t.alive = false;
         b.hit = true;
+        playSfx('explosion');
         addParticles(t.x, t.y, t.kind === 'agent' ? '#ff4040' : '#cccccc');
         if (t.kind === 'agent') score += 40;
         else score = Math.max(0, score - 10);
@@ -739,6 +848,7 @@ function handleCollisions() {
       const dx = c.x - h.x, dy = c.y - h.y;
       if (Math.sqrt(dx * dx + dy * dy) < h.radius + 18) {
         c.alive = false;
+        playSfx('explosion');
         addParticles(c.x, c.y, h.kind === 'oil' ? '#222222' : '#aaaaaa');
         score += 25;
         updateHud();
@@ -763,6 +873,7 @@ function handleCollisions() {
       if (!t.alive || t.isVan) continue;
       if (rectsOverlap(player, t)) {
         t.alive = false;
+        playSfx('explosion');
         addParticles(t.x, t.y, '#ffaa00');
         crashPlayer();
         break;
@@ -772,6 +883,7 @@ function handleCollisions() {
       if (!c.alive) continue;
       if (rectsOverlap(player, c)) {
         c.alive = false;
+        playSfx('explosion');
         addParticles(c.x, c.y, '#ffaa00');
         crashPlayer();
         break;
@@ -782,6 +894,8 @@ function handleCollisions() {
 
 function endGame() {
   state = 'gameover';
+  playSfx('gameover');
+  playGameOverVoice();
   msgEl.innerHTML = 'GAME OVER<br><span style="font-size:14px">SCORE: ' + score + '<br>Press ENTER or tap to retry</span>';
 }
 
